@@ -1,8 +1,8 @@
 script_name = 'Paradox Toolbox'
 script_prefix = '{B58FDB}[Paradox Toolbox] {ffffff}'
 script_author = 'ASKIT'
-script_version = '10.01.22'
-script_site = 'vk.com/moonstd'
+script_version = '10.01.22-1'
+script_site = 'vk.com/askitlab'
 script_color1 = '{B58FDB}'
 
 require "lib.moonloader"
@@ -33,6 +33,7 @@ cfg = inicfg.load(inicfg.load({
         clear_cnn = false,
     },
     tab3 = {
+        autoynf = false,
         autospeed = false,
         wallhack = false,
         textdraw_ids = false,
@@ -70,8 +71,9 @@ radar_finder = imgui.ImBool(cfg.tab2.radar_finder)
 radar_finder_distance = imgui.ImInt(cfg.tab2.radar_finder_distance)
 clear_cnn = imgui.ImBool(cfg.tab2.clear_cnn)
 
-textdraw_ids = imgui.ImBool(cfg.tab3.textdraw_ids)
+autoynf = imgui.ImBool(cfg.tab3.autoynf)
 autospeed = imgui.ImBool(cfg.tab3.autospeed)
+textdraw_ids = imgui.ImBool(cfg.tab3.textdraw_ids)
 wallhack = imgui.ImBool(cfg.tab3.wallhack)
 
 antiflood_work_wfactory = imgui.ImBool(cfg.tab4.antiflood_work_wfactory)
@@ -206,12 +208,13 @@ function imgui.OnDrawFrame()
                     -- ===== Для разработчикА ===== --
 
                 elseif devside and tab.v == 3 then
-
-                    if imgui.Checkbox(u8'* Wallhack', wallhack) then
-                        cfg.tab3.wallhack = wallhack.v
+                    
+                    if imgui.Checkbox(u8'Авто YNF', autoynf) then
+                        cfg.tab3.autoynf = autoynf.v
                         inicfg.save(cfg, direct_cfg)
-                    end imgui.Question('Увеличение скорости передвижения.')
-                    if imgui.Checkbox(u8'* Автоподжим', autospeed) then
+                    end imgui.Question('Автоматическое нажатие кнопок Y N F на работах.')
+                    
+                    if imgui.Checkbox(u8'Автоподжим', autospeed) then
                         cfg.tab3.autospeed = autospeed.v
                         inicfg.save(cfg, direct_cfg)
                     end imgui.Question('Увеличение скорости передвижения.')
@@ -295,6 +298,11 @@ function Process()
             --     setAudioStreamState(radio_record, 0)
             --     setAudioStreamState(radio_europaplus, 1)
             -- end
+
+            -- Авто YNF.
+            if cfg.tab3.autospeed then
+
+            end
 
             -- Увеличение скорости передвижения.
             if cfg.tab3.autospeed and not sampIsCursorActive() then
@@ -480,6 +488,52 @@ function event.onServerMessage(color, text)
         end
     end
 
+end
+
+-- Обработка текстдравов.
+function event.onTextDrawSetString(id, text)
+    if status then
+        if text == 'Y' then
+            send('Y')
+        elseif text == 'N' then
+            send('N')
+        elseif text == 'F' then
+            send('F')
+        end
+    end
+end
+
+function event.onShowTextDraw(id, data)
+    if cfg.tab3.autoynf then
+        if data.text == 'Y' then
+            send('Y')
+        elseif data.text == 'N' then
+            send('N')
+        elseif data.text == 'F' then
+            send('F')
+        end
+    end
+end
+
+ynf_time = {'300', '351', '302', '330'}
+function send(btn)
+    lua_thread.create(function()
+        if cfg.tab3.autoynf then
+            if btn == 'Y' then
+                wait(tonumber(ynf_time[math.random(1, 4)]))
+                setGameKeyState(11, -1)
+                setGameKeyState(0, -1)
+            elseif btn == 'N' then
+                wait(tonumber(ynf_time[math.random(1, 4)]))
+                setGameKeyState(10, -1)
+                setGameKeyState(0, -1)
+            elseif btn == 'F' then
+                wait(tonumber(ynf_time[math.random(1, 4)]))
+                setGameKeyState(15, 1)
+                setGameKeyState(0, -1)
+            end
+        end
+    end)
 end
 
 
