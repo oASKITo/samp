@@ -1,7 +1,7 @@
 script_name = 'Paradox Toolbox'
 script_prefix = '{B58FDB}[Paradox Toolbox] {ffffff}'
 script_author = 'ASKIT'
-script_version = '10.01.22-1'
+script_version = '13.01.22'
 script_site = 'vk.com/askitlab'
 script_color1 = '{B58FDB}'
 
@@ -12,6 +12,7 @@ imgui = require 'imgui'
 vkeys = require 'vkeys'
 encoding = require 'encoding'
 wm = require 'lib.windows.message'
+memory = require 'memory'
 fa = require 'fAwesome5'
 
 direct_cfg = '../config/Paradox Toolbox.ini'
@@ -30,7 +31,7 @@ cfg = inicfg.load(inicfg.load({
         fast_lock_hotkey = 76,
         radar_finder = false,
         radar_finder_distance = 80,
-        clear_cnn = false,
+        advanced_phone = false,
     },
     tab3 = {
         autoynf = false,
@@ -44,6 +45,7 @@ cfg = inicfg.load(inicfg.load({
         antiflood_fraction_rpchat = false,
         antiflood_fraction_nrpchat = false,
         antiflood_family = false,
+        antiflood_cnn = false,
     },
 }, direct_cfg))
 inicfg.save(cfg, direct_cfg)
@@ -69,7 +71,7 @@ fast_lock = imgui.ImBool(cfg.tab2.fast_lock)
 fast_lock_hotkey = imgui.ImInt(cfg.tab2.fast_lock_hotkey)
 radar_finder = imgui.ImBool(cfg.tab2.radar_finder)
 radar_finder_distance = imgui.ImInt(cfg.tab2.radar_finder_distance)
-clear_cnn = imgui.ImBool(cfg.tab2.clear_cnn)
+advanced_phone = imgui.ImBool(cfg.tab2.advanced_phone)
 
 autoynf = imgui.ImBool(cfg.tab3.autoynf)
 autospeed = imgui.ImBool(cfg.tab3.autospeed)
@@ -81,6 +83,7 @@ antiflood_fraction_materials = imgui.ImBool(cfg.tab4.antiflood_fraction_material
 antiflood_fraction_rpchat = imgui.ImBool(cfg.tab4.antiflood_fraction_rpchat)
 antiflood_fraction_nrpchat = imgui.ImBool(cfg.tab4.antiflood_fraction_nrpchat)
 antiflood_family = imgui.ImBool(cfg.tab4.antiflood_family)
+antiflood_cnn = imgui.ImBool(cfg.tab4.antiflood_cnn)
 
 radio = imgui.ImInt(cfg.tab4.radio)
 --=================================--
@@ -95,6 +98,9 @@ tabs = {
     fa.ICON_FA_SPINNER..u8' Антифлуд',
 }
 
+phone_reply = false
+phone_msg_history = {}
+
 
 -- radio = { 'https://radioheart.ru:9024/RH55420', }
 
@@ -106,6 +112,7 @@ function main()
 
     -- Команды.
         sampRegisterChatCommand('mtb', cmd_mtb)
+        sampRegisterChatCommand('ip', cmd_iphone)
 
     -- Функции.
         Process()
@@ -130,8 +137,41 @@ function cmd_mtb(arg)
         sampAddChatMessage(script_prefix..'Ваши координаты: '..player_x..' | '..player_y..' | '..player_z, -1)
         setClipboardText(player_x..', '..player_y..', '..player_z)
         -- setClipboardText('x='..player_x..', y='..player_y)
+    elseif arg == 'cc' then
+        memory.fill(sampGetChatInfoPtr() + 306, 0x0, 25200)
+        memory.write(sampGetChatInfoPtr() + 306, 25562, 4, 0x0)
+        memory.write(sampGetChatInfoPtr() + 0x63DA, 1, 1)
     elseif arg == 'reload' then
         scriptReload()
+    end
+end
+
+
+-- Улучшенный телефон.
+function cmd_iphone(arg)
+    if cfg.tab2.advanced_phone then
+        if arg == '' then
+            sampAddChatMessage(script_prefix..'Команды улучшенного телефона:', -1)
+            sampAddChatMessage(script_prefix..'• '..script_color1..'/ip{FFFFFF} - список команд.', -1)
+            sampAddChatMessage(script_prefix..'• '..script_color1..'/ip [id / nick]{FFFFFF} - позвонить игроку по Айди или Никнейму.', -1)
+            sampAddChatMessage(script_prefix..'• '..script_color1..'/ip [id / nick] [text]{FFFFFF} - написать сообщение игроку по Айди или Никнейму.', -1)
+        elseif arg:match('(%d+)') and not arg:match('(%d+)%s(.+)') then
+            -- sampAddChatMessage(script_prefix..'Debug: Call, Id', -1)
+            local player, text = arg:match('(%d+)')
+            call(tonumber(player))
+        elseif arg:match('(%w+_%w+)') and not arg:match('(%w+_%w+)%s(.+)') then
+            -- sampAddChatMessage(script_prefix..'Debug: Call, Nick', -1)
+            local player, text = arg:match('(%w+_%w+)')
+            call(tostring(player))
+        elseif arg:match('(%d+)%s(.+)') then
+            local player, text = arg:match('(%d+)%s(.+)')
+            call(tonumber(player), tostring(text))
+        elseif arg:match('(%w+_%w+)%s(.+)') then
+            local player, text = arg:match('(%w+_%w+)%s(.+)')
+            call(tostring(player), tostring(text))
+        end
+    else
+        sampAddChatMessage(script_prefix..'Улучшенный телефон выключен. Включите его в меню скрипта.', -1)
     end
 end
 
@@ -174,6 +214,11 @@ function imgui.OnDrawFrame()
                     imgui.SameLine()
                     imgui.sInputInt('Быстрое открытие', hotkey_open2, 'hotkey_open2', 0, 0)
                     imgui.Spacing() imgui.Separator() imgui.Spacing()
+                    if phone_msg_history then
+                        for i = 1, #phone_msg_history do
+                            imgui.Text(u8(phone_msg_history[i]['msg']))
+                        end
+                    end
 
                 elseif tab.v == 2 then -- Основное.
 
@@ -200,10 +245,10 @@ function imgui.OnDrawFrame()
                     end imgui.Question('Предупреждение о радарах.')
                     imgui.SameLine()
                     imgui.sInputInt('Radar Finder', radar_finder_distance, 'radar_finder_distance', 0, 0) imgui.Question('Дистанция срабатывания.')
-                    if imgui.Checkbox(u8'CNN Clear', clear_cnn) then
-                        cfg.tab2.clear_cnn = clear_cnn.v
+                    if imgui.Checkbox(u8'Улучшенный телефон.', advanced_phone) then
+                        cfg.tab2.advanced_phone = advanced_phone.v
                         inicfg.save(cfg, direct_cfg)
-                    end imgui.Question('Удалять все объявления кроме ваших.')
+                    end imgui.Question('Улучшенный телефон. Команда: /ip')
 
                     -- ===== Для разработчикА ===== --
 
@@ -232,10 +277,10 @@ function imgui.OnDrawFrame()
                         inicfg.save(cfg, direct_cfg)
                     end imgui.Question('Удалять все сообщения на работе "Оружейный завод".')
 
-                    if imgui.Checkbox(u8'[Организация] Материалы', antiflood_fraction_materials) then
+                    if imgui.Checkbox(u8'[Организация] Материалы и Нарко', antiflood_fraction_materials) then
                         cfg.tab4.antiflood_fraction_materials = antiflood_fraction_materials.v
                         inicfg.save(cfg, direct_cfg)
-                    end imgui.Question('Удалять все сообщения о операциях с материалами (положил/взял).')
+                    end imgui.Question('Удалять все сообщения об операциях с материалами и наркотиками (положил/взял).')
 
                     if imgui.Checkbox(u8'[Организация] РП чат', antiflood_fraction_rpchat) then
                         cfg.tab4.antiflood_fraction_rpchat = antiflood_fraction_rpchat.v
@@ -251,6 +296,11 @@ function imgui.OnDrawFrame()
                         cfg.tab4.antiflood_family = antiflood_family.v
                         inicfg.save(cfg, direct_cfg)
                     end imgui.Question('Удалять все сообщения из РП чата семьи.\n- Важные сообщения будут отображаться')
+
+                    if imgui.Checkbox(u8'* [Прочее] Объявления', antiflood_cnn) then
+                        cfg.tab4.antiflood_cnn = antiflood_cnn.v
+                        inicfg.save(cfg, direct_cfg)
+                    end imgui.Question('Удалять все объявления Новостной Компании.')
 
                 end
             imgui.EndChild()
@@ -372,7 +422,12 @@ function Process()
                             local speed = getCarSpeed(storeCarCharIsInNoSave(PLAYER_PED))
                             local carSpeed = math.ceil(speed)
                             -- printStyledString(carSpeed, 500, 7)
-                            if speed > 24 and distance < cfg.tab2.radar_finder_distance then printStyledString('RADAR', 10, 5) end
+                            if speed > 24 and distance < cfg.tab2.radar_finder_distance then
+                                printStyledString('RADAR', 10, 5)
+                                local screen_player_x, screen_player_y = convert3DCoordsToScreen(player_x, player_y, player_z)
+                                local screen_model_x, screen_model_y = convert3DCoordsToScreen(model_x, model_y, model_z)
+                                renderDrawLine(screen_player_x, screen_player_y, screen_model_x, screen_model_y, 2, 0xFFD00000)
+                            end
                         end
                     end
                 end
@@ -394,7 +449,80 @@ function Process()
                 end
             end
 
+            -- Улучшенный телефон: Быстрый ответ.
+            if cfg.tab2.advanced_phone and phone_reply and isKeyDown(VK_LMENU) and isKeyJustPressed(VK_UP) then
+                if phone_caller_id then sampSetChatInputText('/ip '..phone_caller_id..' ') sampSetChatInputEnabled(true) phone_reply = false end
+            end
+
+            -- Московское время.
+            unix_time = os.time(os.date('!*t'))
+            moscow_time = unix_time + 3 * 60 * 60
+
         end
+    end)
+end
+
+
+-- Улучшенный телефон: Звонок/сообщение.
+function call(player, text)
+    lua_thread.create(function()
+
+        if not text then
+            if tonumber(player) ~= player_id and tostring(player) ~= player_name then
+                if type(player) == 'number' then
+                    if sampIsPlayerConnected(player) then
+                        sampSendChat('/number '..player)
+                        wait(1000)
+                        if phone_target_number then sampSendChat('/call '..phone_target_number) end
+                        phone_target_number = nil
+                    else
+                        sampAddChatMessage(script_prefix..'Игрок не в сети.', -1)
+                    end
+                elseif type(player) == 'string' then
+                    phone_target_id = sampGetPlayerIdByNickname(player)
+                    if sampIsPlayerConnected(phone_target_id) then
+                        sampSendChat('/number '..phone_target_id)
+                        wait(1000)
+                        if phone_target_number then sampSendChat('/call '..phone_target_number) end
+                        phone_target_number = nil
+                    else
+                        sampAddChatMessage(script_prefix..'Игрок не в сети.', -1)
+                    end
+                end
+            else
+                sampAddChatMessage(script_prefix..'Вы не можете позвонить самому себе.', -1)
+            end
+        elseif text and player then
+            if tonumber(player) ~= player_id and tostring(player) ~= player_name then
+                if type(player) == 'number' then
+                    if sampIsPlayerConnected(player) then
+                        sampSendChat('/number '..player)
+                        wait(1000)
+                        if phone_target_number then
+                            phone_target_name = sampGetPlayerNickname(player)
+                            sampSendChat('/sms '..phone_target_number..' '..text)
+                        end
+                        phone_target_number = nil
+                    else
+                        sampAddChatMessage(script_prefix..'Игрок не в сети.', -1)
+                    end
+                elseif type(player) == 'string' then
+                    phone_target_id = sampGetPlayerIdByNickname(player)
+                    if sampIsPlayerConnected(phone_target_id) then
+                        phone_target_name = player
+                        sampSendChat('/number '..phone_target_id)
+                        wait(1000)
+                        if phone_target_number then sampSendChat('/sms '..phone_target_number..' '..text) end
+                        phone_target_number = nil
+                    else
+                        sampAddChatMessage(script_prefix..'Игрок не в сети.', -1)
+                    end
+                end
+            else
+                sampAddChatMessage(script_prefix..'Вы не можете отправить сообщение самому себе.', -1)
+            end
+        end
+
     end)
 end
 
@@ -450,11 +578,16 @@ function event.onServerMessage(color, text)
         if text:find('Возьмите ящик с заготовкой с полки.') then return false end
         if text:find('К сожалению, Вам попалась бракованная заготовка, собрать оружие не удалось') then return false end
         if text:find('Отправляйтесь к полке и возьмите ящик с заготовкой снова.') then return false end
+        if text:find('Теперь возьмите ящик с заготовкой с полки.') then return false end
+        -- if text:find('Отправляйся в гардером и переоденься,') then return false end
+        -- if text:find('Теперь вас следует взять инструменты с полки.') then return false end
     end
 
     if cfg.tab4.antiflood_fraction_materials then
         if text:find('%w+_%w+ взял со склада %d+ ед. материалов') then return false end
         if text:find('%w+_%w+ положил на склад %d+ ед. материалов') then return false end
+        if text:find('%w+_%w+ взял со склада %d+ грамм наркотиков') then return false end
+        if text:find('%w+_%w+ положил на склад %d+ грамм наркотиков') then return false end
     end
 
     if cfg.tab4.antiflood_fraction_rpchat then
@@ -484,6 +617,42 @@ function event.onServerMessage(color, text)
         elseif text:find('%[FC%] .+ %w+_%w+ %[%d+%]: ВАЖНО: .+') then
         elseif text:find('%[FC%] .+ %w+_%w+ %[%d+%]: ВНИМАНИЕ: .+') then
         elseif text:find('%[FC%] .+ %w+_%w+ %[%d+%]: .+') then
+            return false
+        end
+    end
+
+    -- if cfg.tab4.antiflood_cnn then
+    --     if text:find('.+ '..player_name..' %[%d+%]: .+') then
+    --     elseif text:find('%[FC%] .+ %w+_%w+ %[%d+%]: ВАЖНО: .+') then
+    --         return false
+    --     end
+    -- end
+    
+    if cfg.tab2.advanced_phone then
+        if text:find('Номер телефона %w+_%w+ %[%d+%]: %d+') then
+            phone_target_number = text:match('Номер телефона %w+_%w+ %[%d+%]: (%d+)')
+            return false
+        end
+        if text:find('Телефон данного игрока не найден в справочнике') then
+            sampAddChatMessage(script_prefix..'У игрока нет телефона.', -1)
+            return false
+        end
+        if text:find('SMS от %w+_%w+, тел: %d+: .+') then
+            phone_caller_name, caller_phone, phone_caller_msg = text:match('SMS от (%w+_%w+), тел: (%d+): (.+)')
+            phone_caller_id = sampGetPlayerIdByNickname(phone_caller_name)
+            sampAddChatMessage(script_prefix..'Сообщение от '..phone_caller_name..' ['..phone_caller_id..']: '..phone_caller_msg, -1)
+            phone_reply = true
+            local date = os.date('%H:%M:%S | %d.%m.%y', moscow_time)
+            local file = io.open('moonloader//config//hist.txt', 'a')
+            file:write('['..date..'] '..phone_caller_name..': '..phone_caller_msg..'\n') file:close()
+            local save = '['..date..'] '..phone_caller_name..': '..phone_caller_msg
+            table.insert(phone_msg_history, { msg = save })
+            return false
+        end
+        if text:find('SMS к %w+_%w+, тел: %d+: .+') then
+            phone_caller_msg = text:match('SMS к %w+_%w+, тел: %d+: (.+)')
+            phone_caller_id = sampGetPlayerIdByNickname(phone_target_name)
+            sampAddChatMessage(script_prefix..'Сообщение для '..phone_target_name..' ['..phone_caller_id..']: '..phone_caller_msg, -1)
             return false
         end
     end
@@ -668,6 +837,19 @@ function imgui.CustomMenu(labels, selected, size, speed, centering)
         imgui.SetCursorPos(imgui.ImVec2(c.x, c.y+size.y))
     end
     return bool
+end
+
+
+-- Айди по нику.
+function sampGetPlayerIdByNickname(nick)
+  nick = tostring(nick)
+  local _, myid = sampGetPlayerIdByCharHandle(PLAYER_PED)
+  if nick == sampGetPlayerNickname(myid) then return myid end
+  for i = 0, 1003 do
+    if sampIsPlayerConnected(i) and sampGetPlayerNickname(i) == nick then
+      return i
+    end
+  end
 end
 
 
